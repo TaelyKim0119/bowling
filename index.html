@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Speechlog Bowling Night</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      fontFamily: {
+        display: ['"SF Pro Display"', '"Inter"', '-apple-system', 'sans-serif'],
+        heading: ['"SF Pro Display"', '"Inter"', '-apple-system', 'sans-serif'],
+        body: ['"SF Pro Text"', '"Inter"', '-apple-system', 'sans-serif'],
+      }
+    }
+  }
+}
+</script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<style>
+  .ball {
+    position: relative;
+    transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    animation: gentle 4s ease-in-out infinite;
+  }
+  .ball::before {
+    content: '';
+    position: absolute;
+    top: 6px; left: 10px;
+    width: 16px; height: 10px;
+    background: radial-gradient(ellipse, rgba(255,255,255,0.45), transparent);
+    border-radius: 50%;
+    transform: rotate(-25deg);
+  }
+  .ball::after {
+    content: '';
+    position: absolute;
+    top: 10px; right: 10px;
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.35);
+    box-shadow: -7px 5px 0 rgba(0,0,0,0.3), -2px 9px 0 rgba(0,0,0,0.3);
+  }
+  .ball.picked {
+    opacity: 0;
+    transform: scale(0) translateY(-120px) rotate(180deg);
+    pointer-events: none;
+  }
+  @keyframes gentle {
+    0%, 100% { transform: translateY(0) rotate(0deg); }
+    33% { transform: translateY(-5px) rotate(1deg); }
+    66% { transform: translateY(-2px) rotate(-1deg); }
+  }
+  .ball:nth-child(2n) { animation-delay: -1.3s; }
+  .ball:nth-child(3n) { animation-delay: -2.6s; }
+  .ball:nth-child(5n) { animation-delay: -0.5s; }
+
+  .ball.red   { background: radial-gradient(circle at 35% 35%, #e74c3c, #7b241c); box-shadow: inset 0 -5px 12px rgba(0,0,0,0.45), 0 6px 20px rgba(142,36,36,0.5); }
+  .ball.blue  { background: radial-gradient(circle at 35% 35%, #3a7bd5, #1a3a5c); box-shadow: inset 0 -5px 12px rgba(0,0,0,0.45), 0 6px 20px rgba(26,58,92,0.5); }
+  .ball.green { background: radial-gradient(circle at 35% 35%, #2ecc71, #145a32); box-shadow: inset 0 -5px 12px rgba(0,0,0,0.45), 0 6px 20px rgba(20,90,50,0.5); }
+  .ball.gold  { background: radial-gradient(circle at 35% 35%, #d4ac0d, #7d6608); box-shadow: inset 0 -5px 12px rgba(0,0,0,0.4), 0 6px 20px rgba(125,102,8,0.5); }
+
+  .big-ball {
+    position: relative;
+    animation: popIn 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+  .big-ball::before {
+    content: '';
+    position: absolute;
+    top: 18px; left: 28px;
+    width: 30px; height: 18px;
+    background: radial-gradient(ellipse, rgba(255,255,255,0.35), transparent);
+    border-radius: 50%;
+    transform: rotate(-25deg);
+  }
+  .big-ball::after {
+    content: '';
+    position: absolute;
+    top: 26px; right: 28px;
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.25);
+    box-shadow: -14px 10px 0 rgba(0,0,0,0.22), -5px 16px 0 rgba(0,0,0,0.22);
+  }
+  @keyframes popIn {
+    0% { transform: scale(0) rotate(-200deg); opacity: 0; }
+    60% { transform: scale(1.1) rotate(10deg); opacity: 1; }
+    100% { transform: scale(1) rotate(0); }
+  }
+  @keyframes shake {
+    0%, 100% { transform: translateX(0) translateY(0); }
+    10% { transform: translateX(-4px) translateY(-3px); }
+    20% { transform: translateX(4px) translateY(2px); }
+    30% { transform: translateX(-3px) translateY(3px); }
+    40% { transform: translateX(3px) translateY(-2px); }
+    50% { transform: translateX(-2px) translateY(3px); }
+    60% { transform: translateX(4px) translateY(-3px); }
+    70% { transform: translateX(-3px) translateY(2px); }
+    80% { transform: translateX(2px) translateY(-4px); }
+    90% { transform: translateX(-4px) translateY(3px); }
+  }
+  .shaking { animation: shake 0.6s ease-in-out; }
+  @keyframes fadeSlide {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .fade-slide { animation: fadeSlide 0.4s ease; }
+</style>
+</head>
+<body class="font-body bg-gray-950 text-white min-h-screen overflow-x-hidden">
+
+<div class="fixed inset-0 -z-20 bg-cover bg-center" style="background-image: url('bg.jpg')"></div>
+<div class="fixed inset-0 -z-10 bg-gradient-to-b from-black/60 via-black/45 to-black/70"></div>
+
+<header class="text-center pt-10 pb-4 px-6">
+  <p class="text-sm font-semibold tracking-[6px] uppercase text-white/30 mb-3">Speechlog</p>
+  <h1 class="font-display text-5xl md:text-6xl font-extralight text-white leading-tight tracking-tight">
+    Bowling Night
+  </h1>
+  <p class="text-base text-white/30 tracking-widest font-light mt-4 uppercase">Team Draw 2026</p>
+  <p class="mt-4 font-body text-lg tracking-[3px] text-white/25 font-light">
+    <span id="remaining" class="text-white/70">8</span> <span class="text-white/20">/</span> 8
+  </p>
+</header>
+
+<main class="flex flex-col items-center gap-8 px-6 pb-16">
+
+  <!-- Fishbowl -->
+  <div class="relative w-[360px] h-[340px]">
+    <div id="fishbowlBody" class="absolute inset-0">
+      <svg class="absolute inset-0 w-full h-full pointer-events-none z-10" viewBox="0 0 360 340" fill="none">
+        <path d="M55 65 Q53 65 48 95 Q32 160 38 215 Q44 275 108 305 Q150 324 180 326 Q210 324 252 305 Q316 275 322 215 Q328 160 312 95 Q308 65 305 65"
+              stroke="rgba(255,255,255,0.18)" stroke-width="2.5" fill="rgba(255,255,255,0.025)"/>
+        <path d="M51 63 Q51 52 55 48 L305 48 Q309 52 309 63"
+              stroke="rgba(255,255,255,0.22)" stroke-width="3" fill="rgba(255,255,255,0.04)" stroke-linecap="round"/>
+        <ellipse cx="180" cy="48" rx="130" ry="9" stroke="rgba(255,255,255,0.14)" stroke-width="1.5" fill="rgba(255,255,255,0.02)"/>
+        <path d="M68 85 Q64 140 70 195" stroke="rgba(255,255,255,0.12)" stroke-width="4" stroke-linecap="round"/>
+        <path d="M78 95 Q76 118 79 140" stroke="rgba(255,255,255,0.07)" stroke-width="2" stroke-linecap="round"/>
+        <ellipse cx="180" cy="314" rx="85" ry="6" fill="rgba(255,255,255,0.03)"/>
+        <ellipse cx="180" cy="334" rx="110" ry="5" fill="rgba(0,0,0,0.3)"/>
+      </svg>
+      <div id="ballsContainer"
+           class="absolute bottom-10 left-1/2 -translate-x-1/2 w-[260px] h-[210px] flex flex-wrap items-end justify-center gap-1.5 p-3 z-20">
+      </div>
+    </div>
+  </div>
+
+  <div id="inputArea" class="text-center w-full max-w-md">
+    <p class="text-base text-white/40 mb-4 font-light tracking-wide">이름을 입력하고 볼링공을 뽑으세요</p>
+    <div class="flex gap-3">
+      <input type="text" id="nameInput" placeholder="이름을 입력하세요" maxlength="10" autocomplete="off"
+             class="flex-1 px-6 py-4 rounded-xl bg-white/[0.06] border border-white/10 text-white text-xl font-normal placeholder:text-white/20 outline-none focus:border-amber-500/50 focus:bg-white/[0.08] transition-all">
+      <button id="drawBtn" onclick="draw()"
+              class="px-10 py-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-gray-900 text-lg font-bold tracking-wider uppercase transition-all hover:-translate-y-0.5 hover:shadow-lg hover:shadow-amber-500/30 disabled:opacity-30 disabled:cursor-not-allowed disabled:translate-y-0 disabled:shadow-none">
+        DRAW
+      </button>
+    </div>
+  </div>
+
+  <div id="completeMsg" class="hidden text-center py-6">
+    <p class="font-display text-4xl font-extralight text-white">All Teams Set.</p>
+    <p class="text-base text-white/30 font-light tracking-wider mt-3">Good luck & have fun!</p>
+  </div>
+  <button onclick="resetGame()"
+          class="px-8 py-3 rounded-lg border border-white/10 bg-transparent text-white/30 text-sm font-normal tracking-wider uppercase hover:border-white/25 hover:text-white/50 transition-all cursor-pointer">
+    Reset Game
+  </button>
+
+  <div id="teamsGrid" class="grid grid-cols-2 lg:grid-cols-4 gap-4 w-full max-w-4xl"></div>
+</main>
+
+<div id="pickOverlay" class="hidden fixed inset-0 z-[100] bg-black/85 backdrop-blur-lg items-center justify-center flex-col gap-5">
+  <div id="bigBall" class="big-ball w-40 h-40 rounded-full flex items-center justify-center font-heading text-6xl text-white"></div>
+  <p id="pickName" class="font-display text-4xl font-light mt-2"></p>
+  <p id="pickTeam" class="text-xl text-white/50 font-light tracking-widest"></p>
+</div>
+
+<canvas id="confetti" class="fixed inset-0 pointer-events-none z-[101]"></canvas>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyBnw4VnCjlsHXiO0meVZmw5bg_Qhpun-3I",
+  authDomain: "bowling-7a430.firebaseapp.com",
+  databaseURL: "https://bowling-7a430-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "bowling-7a430",
+  storageBucket: "bowling-7a430.firebasestorage.app",
+  messagingSenderId: "900028479384",
+  appId: "1:900028479384:web:6c553c9a964e22453added"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+const gameRef = db.ref('game');
+
+const TOTAL = 8;
+const TEAMS_INIT = [
+  { name: '민영', color: 'red',   cap: 2, members: [] },
+  { name: '규리', color: 'blue',  cap: 2, members: [] },
+  { name: '민지', color: 'green', cap: 2, members: [] },
+  { name: '태리', color: 'gold',  cap: 2, members: [] },
+];
+
+const LABELS = { red: '민영', blue: '규리', green: '민지', gold: '태리' };
+const ACCENT = { red: 'text-red-400', blue: 'text-sky-400', green: 'text-emerald-400', gold: 'text-amber-500' };
+const BORDER_TOP = { red: 'bg-red-500', blue: 'bg-sky-500', green: 'bg-emerald-500', gold: 'bg-amber-500' };
+const DOT_BG = { red: 'bg-red-500', blue: 'bg-sky-500', green: 'bg-emerald-500', gold: 'bg-amber-500' };
+const PICK_CLR = { red: '#f87171', blue: '#38bdf8', green: '#34d399', gold: '#d4ac0d' };
+const BALL_BG = {
+  red:   'radial-gradient(circle at 35% 35%, #e74c3c, #7b241c)',
+  blue:  'radial-gradient(circle at 35% 35%, #3a7bd5, #1a3a5c)',
+  green: 'radial-gradient(circle at 35% 35%, #2ecc71, #145a32)',
+  gold:  'radial-gradient(circle at 35% 35%, #d4ac0d, #7d6608)',
+};
+const BALL_SHADOW = {
+  red:   'inset 0 -5px 12px rgba(0,0,0,0.45), 0 6px 20px rgba(142,36,36,0.5)',
+  blue:  'inset 0 -5px 12px rgba(0,0,0,0.45), 0 6px 20px rgba(26,58,92,0.5)',
+  green: 'inset 0 -5px 12px rgba(0,0,0,0.45), 0 6px 20px rgba(20,90,50,0.5)',
+  gold:  'inset 0 -5px 12px rgba(0,0,0,0.4), 0 6px 20px rgba(125,102,8,0.5)',
+};
+
+let TEAMS = JSON.parse(JSON.stringify(TEAMS_INIT));
+let balls = [], usedNames = new Set(), totalPicked = 0;
+
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+
+function buildBalls(order) {
+  const base = [];
+  let id = 1;
+  TEAMS_INIT.forEach((t,ti) => { for (let i = 0; i < t.cap; i++) base.push({id:id++,teamIndex:ti,color:t.color,picked:false}); });
+  balls = order.map(idx => base[idx]);
+}
+
+function renderBalls() {
+  const c = document.getElementById('ballsContainer');
+  c.innerHTML = '';
+  balls.forEach(b => {
+    const el = document.createElement('div');
+    el.className = `ball ${b.color} w-[52px] h-[52px] rounded-full flex items-center justify-center font-heading text-xl text-white/90 cursor-default${b.picked?' picked':''}`;
+    el.id = `ball-${b.id}`;
+    el.textContent = b.id;
+    c.appendChild(el);
+  });
+}
+
+function renderTeams() {
+  const g = document.getElementById('teamsGrid');
+  g.innerHTML = '';
+  TEAMS.forEach(t => {
+    const empty = t.cap - t.members.length;
+    let slots = t.members.map(m => `<div class="py-2 text-lg text-white/70 border-b border-white/[0.04] fade-slide">${m}</div>`).join('');
+    for (let i = 0; i < empty; i++) slots += `<div class="py-2 text-lg text-white/[0.1] border-b border-white/[0.04]">---</div>`;
+    g.innerHTML += `
+      <div class="relative bg-white/[0.04] border border-white/[0.07] rounded-2xl p-6 text-center min-h-[200px] hover:bg-white/[0.06] hover:border-white/[0.12] transition-all overflow-hidden">
+        <div class="absolute top-0 left-0 right-0 h-1 rounded-t-2xl ${BORDER_TOP[t.color]}"></div>
+        <div class="w-3 h-3 rounded-full ${DOT_BG[t.color]} mx-auto mb-3"></div>
+        <h3 class="font-heading text-2xl tracking-[4px] ${ACCENT[t.color]} mb-1">${t.name}</h3>
+        <p class="text-sm text-white/20 mb-4 font-light">${t.members.length} / ${t.cap}</p>
+        ${slots}
+      </div>`;
+  });
+}
+
+function updateUI() {
+  document.getElementById('remaining').textContent = TOTAL - totalPicked;
+  if (totalPicked >= TOTAL) {
+    document.getElementById('inputArea').classList.add('hidden');
+    document.getElementById('completeMsg').classList.remove('hidden');
+  } else {
+    document.getElementById('inputArea').classList.remove('hidden');
+    document.getElementById('completeMsg').classList.add('hidden');
+  }
+}
+
+function loadFromDB(snapshot) {
+  const data = snapshot.val();
+  if (!data || !data.ballOrder) {
+    const order = [...Array(TOTAL).keys()];
+    shuffle(order);
+    gameRef.set({ ballOrder: order, picks: {} });
+    return;
+  }
+  TEAMS = JSON.parse(JSON.stringify(TEAMS_INIT));
+  usedNames = new Set();
+  totalPicked = 0;
+  buildBalls(data.ballOrder);
+  if (data.picks) {
+    Object.values(data.picks).sort((a,b) => a.timestamp - b.timestamp).forEach(p => {
+      const ball = balls.find(b => b.id === p.ballId);
+      if (ball) {
+        ball.picked = true;
+        TEAMS[ball.teamIndex].members.push(p.name);
+        usedNames.add(p.name);
+        totalPicked++;
+      }
+    });
+  }
+  renderBalls();
+  renderTeams();
+  updateUI();
+}
+gameRef.on('value', loadFromDB);
+
+function draw() {
+  const input = document.getElementById('nameInput');
+  const name = input.value.trim();
+  if (!name) { input.focus(); return; }
+  if (usedNames.has(name)) { input.classList.add('!border-red-500/60'); setTimeout(()=>input.classList.remove('!border-red-500/60'),1500); return; }
+
+  const available = balls.filter(b => !b.picked);
+  if (!available.length) return;
+
+  document.getElementById('drawBtn').disabled = true;
+  document.getElementById('fishbowlBody').classList.add('shaking');
+
+  setTimeout(() => {
+    document.getElementById('fishbowlBody').classList.remove('shaking');
+    const pick = available[Math.floor(Math.random() * available.length)];
+
+    gameRef.child('picks').push().set({
+      name, ballId: pick.id, timestamp: firebase.database.ServerValue.TIMESTAMP
+    });
+
+    setTimeout(() => {
+      const ov = document.getElementById('pickOverlay');
+      const bb = document.getElementById('bigBall');
+      bb.style.background = BALL_BG[pick.color];
+      bb.style.boxShadow = BALL_SHADOW[pick.color];
+      bb.textContent = pick.id;
+      bb.style.color = '#fff';
+      document.getElementById('pickName').textContent = name;
+      document.getElementById('pickName').style.color = PICK_CLR[pick.color];
+      document.getElementById('pickTeam').textContent = LABELS[pick.color];
+      ov.classList.remove('hidden');
+      ov.classList.add('flex');
+      bb.style.animation = 'none'; bb.offsetHeight; bb.style.animation = '';
+      fireConfetti(pick.color);
+
+      setTimeout(() => {
+        ov.classList.add('hidden');
+        ov.classList.remove('flex');
+        input.value = ''; input.focus();
+        document.getElementById('drawBtn').disabled = false;
+        if (totalPicked >= TOTAL) {
+          fireConfetti('all'); setTimeout(() => fireConfetti('all'), 400);
+        }
+      }, 2200);
+    }, 200);
+  }, 650);
+}
+
+document.getElementById('nameInput').addEventListener('keydown', e => { if (e.key === 'Enter') draw(); });
+
+function resetGame() {
+  const order = [...Array(TOTAL).keys()];
+  shuffle(order);
+  gameRef.set({ ballOrder: order, picks: {} });
+}
+
+const canvas = document.getElementById('confetti');
+const ctx = canvas.getContext('2d');
+let particles = [], confettiAnim = null;
+function resizeCanvas() { canvas.width = innerWidth; canvas.height = innerHeight; }
+addEventListener('resize', resizeCanvas); resizeCanvas();
+
+const CC = {
+  red:['#e74c3c','#ff6b81','#c0392b','#fadbd8'],
+  blue:['#3a7bd5','#85c1e9','#1a5276','#d6eaf8'],
+  green:['#2ecc71','#82e0aa','#1e8449','#d5f5e3'],
+  gold:['#d4ac0d','#f9e79f','#b7950b','#fef9e7'],
+  all:['#e74c3c','#3a7bd5','#2ecc71','#d4ac0d','#f1c40f','#e8daef','#fadbd8','#d6eaf8'],
+};
+
+function fireConfetti(k) {
+  const c = CC[k] || CC.all;
+  for (let i = 0; i < 100; i++) particles.push({
+    x: canvas.width/2 + (Math.random()-.5)*300, y: canvas.height/2 + (Math.random()-.5)*100,
+    vx: (Math.random()-.5)*18, vy: Math.random()*-16-3,
+    w: Math.random()*8+3, h: Math.random()*5+2,
+    color: c[Math.floor(Math.random()*c.length)],
+    rot: Math.random()*360, rv: (Math.random()-.5)*14, life: 1,
+  });
+  if (!confettiAnim) animC();
+}
+function animC() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  particles.forEach(p => {
+    p.x += p.vx; p.y += p.vy; p.vy += 0.3; p.vx *= 0.99; p.rot += p.rv; p.life -= 0.01;
+    ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot * Math.PI / 180);
+    ctx.globalAlpha = Math.max(0, p.life); ctx.fillStyle = p.color;
+    ctx.fillRect(-p.w/2, -p.h/2, p.w, p.h); ctx.restore();
+  });
+  particles = particles.filter(p => p.life > 0);
+  if (particles.length) confettiAnim = requestAnimationFrame(animC);
+  else { ctx.clearRect(0, 0, canvas.width, canvas.height); confettiAnim = null; }
+}
+</script>
+</body>
+</html>
